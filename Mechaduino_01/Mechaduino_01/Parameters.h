@@ -1,3 +1,6 @@
+#include <avr/pgmspace.h>
+#include <Wire.h>
+
 //Contains the Mechaduino parameter declarations
 
 #ifndef __PARAMETERS_H__

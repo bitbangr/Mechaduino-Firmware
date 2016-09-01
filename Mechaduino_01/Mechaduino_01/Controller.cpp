@@ -1,13 +1,16 @@
 //Contains TC5 Controller definition
 
-
 #include <SPI.h>
 
-#include "State.h" 
+#include "State.h"
 #include "Utils.h"
 #include "Parameters.h"
 
 
+
+/* Currently this interrupt handler is being called at 3Kz rate or 3000 times per second
+ * 
+ */
 void TC5_Handler()
 {
 
@@ -25,18 +28,12 @@ void TC5_Handler()
      // TC->INTFLAG.bit.MC0 = 1;    // writing a one clears the flag ovf flag
     // } */
 
-
-
   ///new
   // TcCount16* TC = (TcCount16*) TC3; // get timer struct
   if (TC5->COUNT16.INTFLAG.bit.OVF == 1) {  // A overflow caused the interrupt
 
-
-
-
     a = readEncoder();
     y = lookup_angle(a);
-
 
     if ((y - y_1) < -180.0) {
       wrap_count += 1;
@@ -48,20 +45,14 @@ void TC5_Handler()
 
     yw = (y + (360.0 * wrap_count));
 
-
-
-
-
-
     switch (mode) {
 
-      case 'x':
+      case 'x':                            // proportional feedback
         e = (r - yw);
 
         ITerm += (pKi * e);
         if (ITerm > 150) ITerm = 150;
         else if (ITerm < -150) ITerm = -150;
-
 
         u = ((pKp * e) + ITerm - (pKd * (yw - yw_1))); //ARDUINO library style
         //u = u+lookup_force(a)-20;
@@ -69,12 +60,9 @@ void TC5_Handler()
 
         //  u = 20*e;//
 
-
-
         break;
 
-      case 'v':
-
+      case 'v':                            // velocity feedback
 
         e = (r - ((yw - yw_1) * 500));//416.66667)); degrees per Tc to rpm
 
@@ -82,13 +70,12 @@ void TC5_Handler()
         if (ITerm > 200) ITerm = 200;
         else if (ITerm < -200) ITerm = -200;
 
-
-        u = ((vKp * e) + ITerm - (vKd * (yw - yw_1)));//+ lookup_force(a)-20; //ARDUINO library style
+        u = ((vKp * e) + ITerm - (vKd * (yw - yw_1)));   //+ lookup_force(a)-20; //ARDUINO library style
 
         break;
 
       case 't':
-        u = 1.0 * r ;//+ 1.7*(lookup_force(a)-20);
+        u = 1.0 * r ;    //+ 1.7*(lookup_force(a)-20);
         break;
 
       default:
@@ -96,32 +83,22 @@ void TC5_Handler()
         break;
     }
 
-
-
-
-
-//
-//    if (u > 0) {
-//      PA = 1.8;
-//    }
-//    else {
-//      PA = -1.8;
-//    }
-//
-//    y += PA;
-
-
+    //
+    //    if (u > 0) {
+    //      PA = 1.8;
+    //    }
+    //    else {
+    //      PA = -1.8;
+    //    }
+    //
+    //    y += PA;
 
     if (u > 0) {
-      y+=PA;
+      y += PA;
     }
     else {
-      y -=PA;
+      y -= PA;
     }
-
-
-
-
 
     if (u > uMAX) {                          //saturation limits max current command
       u = uMAX;
@@ -130,20 +107,18 @@ void TC5_Handler()
       u = -uMAX;
     }
 
-
-
     U = abs(u);       //+lookup_force((((a-4213)%16384)+16384)%16384)-6); ///p);//+i);
-
 
     if (abs(e) < 0.1) {
       digitalWrite(pulse, HIGH);
-     //   SerialUSB.println(r);
+      //SerialUSB.println(r);
     }
     else  {
       digitalWrite(pulse, LOW);
+      //SerialUSB.println(e);
     }
 
-    output(-y, U);  //-y
+    output(-y, U);  //-y           -y is Theta and U is value of current to motor
 
     e_3 = e_2;
     e_2 = e_1;
@@ -154,9 +129,10 @@ void TC5_Handler()
     yw_1 = yw;
     y_1 = y;
 
-
-    TC5->COUNT16.INTFLAG.bit.OVF = 1;    // writing a one clears the flag ovf flag
-  }
+    TC5->COUNT16.INTFLAG.bit.OVF = 1;    // writing a one clears the flag ovf flag  
+                                         // MGJ_Issue The original check for this was an if stmt checking for the value of 1 and now we are setting it to 1 after we exit this block????
+    
+  } // if (TC5->COUNT16.INTFLAG.bit.OVF == 1)
 
 
 }

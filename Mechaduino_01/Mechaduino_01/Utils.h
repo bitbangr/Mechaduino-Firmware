@@ -17,6 +17,8 @@
 	void serialCheck();
 
 	void parameterQuery();
+
+  void parameterQueryNoLookup() ; // Same as parameterQuery without printing out the lookup table
 	
 	float lookup_angle(int n);
 	
@@ -33,6 +35,8 @@
 	float lookup_force(int m);
 	
 	int mod(int xMod, int mMod);
+
+  void testModFunction();
 	
 	float lookup_sine(int m);
 	
@@ -47,10 +51,15 @@
 	void parameterEditmain();
 	
 	void parameterEditp();
-	
+  
 	void parameterEditv();
 	
 	void parameterEdito();
-	
 
+  void incTenDegrees();
+
+  void decTenDegrees();
+
+  void parameterDumpSineLookup();
+	
 #endif

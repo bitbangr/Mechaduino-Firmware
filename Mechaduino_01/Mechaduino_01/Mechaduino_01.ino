@@ -46,6 +46,8 @@
 #include "Utils.h"
 #include "Parameters.h"
 #include "state.h"
+#include <SPI.h>
+#include <Wire.h>
 
 //////////////////////////////////////
 /////////////////SETUP////////////////
@@ -60,12 +62,12 @@ void setup() {
 
   SerialUSB.begin(115200);
 
-  // while (!SerialUSB) {};     //wait for serial
+  while (!SerialUSB) {};     // MGJ_Issues wait for serial - This is only for setup 
 
   delay(500);
-
-
-   // enableTCInterrupts();     //start in closed loop mode
+ 
+  // testModFunction();
+  // enableTCInterrupts();     //start in closed loop mode
   //  mode = 'x';
   //
   //  Wire.begin(4);                // join i2c bus with address #8
@@ -86,9 +88,8 @@ void loop()
 {
   //mode = 'x';
 
-
   serialCheck();
-  
+
   // r=0.1125*step_count;
  // r=0.1*step_count;
 

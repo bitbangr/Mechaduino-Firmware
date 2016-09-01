@@ -42,9 +42,9 @@ extern void output(float,int);
 
 extern volatile int uMAX;
 
-extern volatile float ITerm;
+extern volatile float ITerm; // MGJ_Issues Why is this declared twice - see line 33
 
-extern volatile char mode;
+extern volatile char mode; // MGJ_Issues Why is this declared twice - see line 35
 
 
 //___________________________________
