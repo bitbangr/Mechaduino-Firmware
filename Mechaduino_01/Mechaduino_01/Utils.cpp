@@ -46,7 +46,7 @@ void setupPins() {
 
 void setupSPI() {
 
-  SPISettings settingsA(400000, MSBFIRST, SPI_MODE1);             ///400000, MSBFIRST, SPI_MODE1);
+  SPISettings settingsA(400000, MSBFIRST, SPI_MODE1);             ///400000, MSBFIRST, SPI_MODE1);  // MGJ_Info 400000 Hz = 2500 ns(period)
   SPI.begin();    //AS5047D SPI uses mode=1 (CPOL=0, CPHA=1)
   SerialUSB.println("Begin...");
   delay(1000);
@@ -122,15 +122,15 @@ void output(float theta, int effort) {                    //////////////////////
  */
 void commandW() {
 
-  int encoderReading = 0;     //or float?  not sure if we can average for more res?
+  int encoderReading = 0;     // or float?  not sure if we can average for more res?
   int lastencoderReading = 0;
-  int avg = 10;                //how many readings to average
+  int avg = 10;                // how many readings to average
 
   int iStart = 0;
   int jStart = 0;
   int stepNo = 0;
 
-  int fullStepReadings[spr];
+  int fullStepReadings[spr];   // Table to hold reading for each of the 200 "Full" steps of our motor operating in stepper mode
   int fullStep = 0;
   //  float newLookup[cpr];
   int ticks = 0;
@@ -149,6 +149,7 @@ void commandW() {
     return;
   }
 
+  // return to step 0 before we start calibration routine
   while (stepNumber != 0) {
     if (stepNumber > 0) {
       dir = 1;
@@ -161,20 +162,26 @@ void commandW() {
     delay(100);
   }
 
+//const int spr = 200; //  200 steps per revolution
+//const float aps = 360.0 / spr; // angle per step  360/200 = 1.8 degrees
+//int cpr = 16384; //counts per rev  MGJ_Info  The AS5047D has 14 bits of resolution so 2^14=16384 possible values.
+
   dir = 1;
   for (int x = 0; x < spr; x++) {
 
     encoderReading = 0;
     delay(100);
 
-    for (int reading = 0; reading < avg; reading++) {
-      encoderReading += readEncoder();
-      delay(10);
+// int (16 bit) - signed number from -32768 to 32767. This is most commonly what you see used for general purpose variables in Arduino example code provided with the IDE
+
+    for (int reading = 0; reading < avg; reading++) {  // MGJ_info avg is set to 10 so we are averaging 10 readings from the sensor.  It would be interesting to see what the std deviation is here.
+      encoderReading += readEncoder();                 // MGJ_info int encoderReading ... What happens if you have maximum value 16384 * 10 -> 163,840 which is larger than what Int type holds
+      delay(10);                                       //    
     }
 
     encoderReading = encoderReading / avg;
 
-    anglefloat = encoderReading * 0.02197265625;     // MGJ_Issues - magic number
+    anglefloat = encoderReading * 0.02197265625;     // MGJ_info - 14 Bit sensor pow(2,14)=16384 to 360 degree circle ->  360 degree/16384 sensor divs = 0.02197265625 degrees per sensor div
     fullStepReadings[x] = encoderReading;
     SerialUSB.println(fullStepReadings[x], DEC);
     oneStep();
@@ -486,6 +493,41 @@ void oneStep() {           /////////////////////////////////   oneStep    //////
 }
 
 /*
+ * SPI Communications stuff
+ * 
+ * ----------------
+ * SPI Command Frame (16 BIT i.e 0xFFFF to 0x0000 possible values) 
+ * Bit    Name        Description
+ * 15     PARC        Parity bit (even) calculated on the lower 15 bits of command frame - (even # of 1's gives 0, odd # of 1's gives 1)
+ * 14     R/W         0: Write 1: Read
+ * 13:0   ADDR        Address to read or write
+ * 
+ * ------------------
+ * Registers of Interest
+ * MAG (0x3FFD)
+ * Name      Read/Write  Bit Position  Description
+ * CMAG      R           13:0          CORDIC magnitude information
+ * 
+ * ANGLE (0x3FFE)
+ * Name      Read/Write  Bit Position  Description
+ * CORDICANG R           13:0          Angle information without dynamic angle error compensation
+ * 
+ * ANGLECOM (0x3FFF)
+ * Name      Read/Write  Bit Position  Description
+ * DAECANG   R           13:0          Angle information with dynamic angle error compensation
+ * 
+ * -----------------
+ * Read ANGLECOM Address Register (0x3FFF) Example
+ * 
+ * 0x3FFF ANGLECOM - measured angle with dynamic angle error compensation 
+ * 0011 1111 1111 1111 
+ * bit 14 set for read for '1' 
+ * 0111 1111 1111 1111 
+ * using even parity gives us ( even # of 1's gives 0, odd # of 1's gives 1)
+ * 1111 1111 1111 1111
+ * or
+ * 0xFFFF
+ * 
  *  Read the value from the AS5047D Rotary encoder
  *  2 Byte transfer over SPI 
  *  b1 high byte so left shift 8 bits
@@ -497,27 +539,38 @@ int readEncoder()           ////////////////////////////////////////////////////
 {
   long angleTemp;                         // MGJ_Issue long is 4 bytes shouldn't we be using unsigned int which is two bytes?
   digitalWrite(chipSelectPin, LOW);
-
-  //angle = SPI.transfer(0xFF);
-  byte b1 = SPI.transfer(0xFF);
+  
+  byte b1 = SPI.transfer(0xFF);  // In case the data is 0xEF, then you would send 0xFF (parity bit is 1).
   byte b2 = SPI.transfer(0xFF);
 
   angleTemp = (((b1 << 8) | b2) & 0B0011111111111111);
-  //  SerialUSB.println((angle & 0B0011111111111111)*0.02197265625);
+  
+  //  SerialUSB.println((angle & 0B0011111111111111)*0.02197265625); // MGJ_info - 14 Bit sensor pow(2,14)=16384 to 360 degree circle ->  360 degree/16384 sensor divs = 0.02197265625 degrees per sensor div
 
   digitalWrite(chipSelectPin, HIGH);
   return angleTemp;
 }
 
+/*
+ * Figure 21: DIAAGC (0x3FFC)
+ * 
+ * Name    Read/Write     Bit Position     Description  
+ * MAGL    R              11               Diagnostics: Magnetic field strength too low; AGC=0xFF
+ * MAGH    R              10               Diagnostics: Magnetic field strength too high; AGC=0x00
+ * COF     R              9                Diagnostics: CORDIC overflow
+ * LF      R              8                Diagnostics: Offset compensation LF=0:internal offset loops not ready regulated LF=1:internal offset loop finished   
+ * AGC     R              7:0              Automatic gain control value
+ *  
+ */
 void readEncoderDiagnostics()           //////////////////////////////////////////////////////   READENCODERDIAGNOSTICS   ////////////////////////////
 {
-  long angleTemp;
+  long angleTemp;                      // MGJ_Info should be unsigned int for 16 bits or two bytes
   digitalWrite(chipSelectPin, LOW);
 
   ///////////////////////////////////////////////READ DIAAGC (0x3FFC)
   SerialUSB.print("DIAAGC (0x3FFC)   ");
 
-  SPI.transfer(0xFF);  // Why are we sending 0xFF instead of 0x3F? Does this have anything to do with a parity bit?
+  SPI.transfer(0xFF); 
   SPI.transfer(0xFC);
   digitalWrite(chipSelectPin, HIGH);
 
@@ -528,9 +581,9 @@ void readEncoderDiagnostics()           ////////////////////////////////////////
   byte b2 = SPI.transfer(0x00);
 
   angleTemp = (((b1 << 8) | b2) & 0B1111111111111111);
-  SerialUSB.print((angleTemp | 0B1110000000000000000 ), BIN);
+  SerialUSB.print((angleTemp | 0B1110000000000000000 ), BIN);  // MGJ_Info -- is this some kind of format change from long to int?
 
-  if (angleTemp & (1 << 14)) {
+  if (angleTemp & (1 << 14)) {                                 // MGJ_Info -- Is this a parity error check?
     SerialUSB.print("  Error occurred  ");
   }
 
@@ -631,7 +684,8 @@ void print_angle()                ///////////////////////////////////       PRIN
   delay(10);
   a = a / 10;
 
-  anglefloat = a * 0.02197265625;
+  anglefloat = a * 0.02197265625;   // MGJ_info - 14 Bit sensor pow(2,14)=16384 to 360 degree circle ->  360 degree/16384 sensor divs = 0.02197265625 degrees per sensor div
+
   SerialUSB.print(stepNumber, DEC);
   SerialUSB.print(" , ");
   SerialUSB.print(stepNumber * aps, DEC);
